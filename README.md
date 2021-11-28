@@ -1,85 +1,79 @@
-# hardhat-example-plugin
+# hardhat-interact
 
-_A one line description of the plugin_
+_Run queries and transactions against contracts using a handy CLI which integrates with your deployments._
 
-[Hardhat](https://hardhat.org) plugin example. 
+A [Hardhat](https://hardhat.org) plugin. 
 
 ## What
 
-<_A longer, one paragraph, description of the plugin_>
-
-This plugin will help you with world domination by implementing a simple tic-tac-toe in the terminal.
+This plugin implements a CLI to allow you to run read or write queries against your deployed contracts on any network! It uses deployment manifests exported in either hardhat or `truffle` format. This plugin also includes a command to import arbitrary contracts from etherscan as needed.
 
 ## Installation
 
-<_A step-by-step guide on how to install the plugin_>
-
 ```bash
-npm install <your npm package name> [list of peer dependencies]
+npm install --save-dev hardhat-interact @nomiclabs/hardhat-ethers
 ```
 
 Import the plugin in your `hardhat.config.js`:
 
 ```js
-require("<your plugin npm package name>");
+require("hardhat-interact");
 ```
 
 Or if you are using TypeScript, in your `hardhat.config.ts`:
 
 ```ts
-import "<your plugin npm package name>";
+import "hardhat-interact";
 ```
-
 
 ## Required plugins
 
-<_The list of all the required Hardhat plugins if there are any_>
-
-- [@nomiclabs/hardhat-web3](https://github.com/nomiclabs/hardhat/tree/master/packages/hardhat-web3)
+- [@nomiclabs/hardhat-ethers](https://github.com/nomiclabs/hardhat/tree/master/packages/hardhat-ethers)
 
 ## Tasks
 
-<_A description of each task added by this plugin. If it just overrides internal 
-tasks, this may not be needed_>
-
-This plugin creates no additional tasks.
-
-<_or_>
-
-This plugin adds the _example_ task to Hardhat:
+This plugin adds the _interact_ task to Hardhat:
 ```
-output of `npx hardhat help example`
+$ npx hardhat --network mainnet interact
+
+Interact CLI
+Please review this information:
+================================================================================
+> Network: mainnet
+> Gas price: provider default
+> Block tag: latest
+> Read Only: 0x0000000000000000000000000000000000000000
+================================================================================
+
+
+? Pick a CONTRACT: (Press <enter> to submit)
+❯ AddressResolver
+  CollateralManager
+  CollateralManagerState
+  CollateralShort
+  CollateralUtil
+  DappMaintenance
+  DebtCache
+(Move up and down to reveal more choices)
 ```
 
-## Environment extensions
+Note that the network specified by `--network` above must exist in hardhat configuration, and the network should have a preexisting deployment of your contracts.
 
-<_A description of each extension to the Hardhat Runtime Environment_>
+Follow the on-screen instructions to select a contract, then a function, and finally the arguments. If its read-only, you can choose to view the return value of the function. If it is a writable, state-changing function, you will be prompted to sign the transaction and submit it to the network.
 
-This plugin extends the Hardhat Runtime Environment by adding an `example` field
-whose type is `ExampleHardhatRuntimeEnvironmentField`.
+The interact command supports a few command line arguments. To see an updated list, use `npx hardhat interact --help`.
 
 ## Configuration
 
-<_A description of each extension to the HardhatConfig or to its fields_>
-
-This plugin extends the `HardhatUserConfig`'s `ProjectPathsUserConfig` object with an optional
-`newPath` field.
+This plugin extends the `ProjectPathsUserConfig` object with an optional
+`deployments` field. This field specifies the location of the deployment artifacts (either `hardhat-deploy` or `truffle` compatible) within your repository. By default, this value is `./deployments/`.
 
 This is an example of how to set it:
 
 ```js
 module.exports = {
   paths: {
-    newPath: "new-path"
+    deployments: "publish/deployed"
   }
 };
 ```
-
-## Usage
-
-<_A description of how to use this plugin. How to use the tasks if there are any, etc._>
-
-There are no additional steps you need to take for this plugin to work.
-
-Install it and access ethers through the Hardhat Runtime Environment anywhere
-you need it (tasks, scripts, tests, etc).
