@@ -11,7 +11,7 @@
     "rootDirs": ["./src", "./test"],
     "esModuleInterop": true
   },
-  "exclude": ["dist", "node_modules"],
+  "exclude": ["dist", "node_modules", "./test/fixture-projects"],
   "include": [
     "./test",
     "./src"

@@ -1,6 +1,6 @@
 import _ from 'lodash';
 
-import { extendConfig, task } from "hardhat/config";
+import { extendConfig, task, types } from "hardhat/config";
 import { HardhatConfig, HardhatRuntimeEnvironment, HardhatUserConfig } from "hardhat/types";
 
 import { ethers, ethers as Ethers } from 'ethers';
@@ -50,18 +50,36 @@ interface InteractContext {
     signer: Ethers.Signer;
     blockTag: number;
 
-    pickedContract: string|null;
-    pickedMethod: string|null;
+    pickContract: string|null;
+    pickFunction: string|null;
 
     currentArgs: any[]|null;
     txnValue: Wei;
 };
+
+interface InteractTaskArgs {
+    providerUrl: string;
+    privateKey?: string;
+    publicKey?: string;
+    blockTag: number;
+
+    batch: boolean;
+    contract: string;
+    func: string;
+    value: string;
+    args: string;
+}
 
 task('interact', 'Call contracts with CLI')
 .addOptionalParam('privateKey', 'Private key to use to sign txs')
 .addOptionalParam('publicKey', 'Address to ')
 .addOptionalParam('providerUrl', 'The http provider to use for communicating with the blockchain')
 .addOptionalParam('blockTag', 'Specify the block tag to interact at, per ethers.js specification')
+.addOptionalParam('batch', 'Execute one command with no logs except the value, and exit', false, types.boolean)
+.addOptionalParam('contract', 'Contract to execute')
+.addOptionalParam('func', 'Function to execute')
+.addOptionalParam('value', 'Amount ETH to send to payable function (in ETH units)', 0, types.float)
+.addOptionalParam('args', 'Arguments for contract and function to execute (json formatted)', '', types.string)
 .setAction(async (args, hre) => {
 
     if (args.privateKey && args.publicKey) {
@@ -69,7 +87,7 @@ task('interact', 'Call contracts with CLI')
         return 1;
     }
 
-    const ctx = buildInteractContext(hre, args);
+    const ctx = await buildInteractContext(hre, args);
 
     inquirer.registerPrompt('search-list', require('inquirer-search-list'));
 
@@ -77,25 +95,35 @@ task('interact', 'Call contracts with CLI')
     // Start interaction
     // -----------------
 
-    await printHeader(ctx);
+    if (!args.batch) {
+        await printHeader(ctx);
+    }
 
     while (true) {
-        if (!ctx.pickedContract) {
+        if (!ctx.pickContract) {
             await pickContract(ctx);
         }
-        else if (!ctx.pickedMethod) {
-            await pickMethod(ctx);
+        else if (!ctx.pickFunction) {
+            if (!args.batch) {
+                await printHelpfulInfo(ctx);
+            }
+
+            await pickFunction(ctx);
         }
         else if (!ctx.currentArgs) {
             await queryArgs(ctx);
         }
         else {
-            await executeSelection(ctx);
+            const result = await executeSelection(ctx, args.batch);
+
+            if (args.batch) {
+                return result;
+            }
         }
     }
 });
 
-function buildInteractContext(hre: HardhatRuntimeEnvironment, args: { providerUrl: string, privateKey?: string, publicKey?: string, blockTag: number }): InteractContext {
+async function buildInteractContext(hre: HardhatRuntimeEnvironment, args: InteractTaskArgs): Promise<InteractContext> {
     let { providerUrl, privateKey, publicKey, blockTag } = args;
 
     // load private key
@@ -113,9 +141,11 @@ function buildInteractContext(hre: HardhatRuntimeEnvironment, args: { providerUr
         new hre.ethers.providers.JsonRpcProvider(providerUrl) :
         new hre.ethers.providers.Web3Provider(hre.network.provider as any);
 
-    const signer = publicKey || !privateKey ? 
-        new hre.ethers.VoidSigner(publicKey || hre.ethers.constants.AddressZero, provider) :
-        new hre.ethers.Wallet(privateKey!, provider);
+    const signer = publicKey ? 
+        new hre.ethers.VoidSigner(publicKey || hre.ethers.constants.AddressZero, provider) : // use signer from public key (can't actually sign)
+            (privateKey ?
+                new hre.ethers.Wallet(privateKey!, provider) :        // use signer from provided private key
+                (await hre.ethers.getSigners())[0])                   // use default signer
 
     // load contracts
     const deploymentPaths = [];
@@ -139,14 +169,20 @@ function buildInteractContext(hre: HardhatRuntimeEnvironment, args: { providerUr
         blockTag,
         hre,
 
-        pickedContract: null,
-        pickedMethod: null,
-        currentArgs: null,
-        txnValue: wei(0),
+        pickContract: args.contract || null,
+        pickFunction: args.func || null,
+        currentArgs: args.args ? JSON.parse(args.args) : null,
+        txnValue: wei(args.value || 0),
     };
 }
 
 async function printHeader(ctx: InteractContext) {
+
+    // retrieve balance of the signer address
+    // this isnt always necessary but it serves as a nice test that the provider is working
+    // and prevents the UI from lurching later if its queried later
+    const signerBalance = wei(await ctx.signer.getBalance());
+
     console.clear();
     console.log(green(`Interact CLI`));
     console.log(gray('Please review this information:'));
@@ -161,7 +197,16 @@ async function printHeader(ctx: InteractContext) {
         console.log(gray(`> Read Only: ${await ctx.signer.getAddress()}`));
     } else {
         console.log(yellow(`> Read/Write: ${await ctx.signer.getAddress()}`));
-        console.log(yellow(`> Balance of Signer: ${await ctx.signer.getBalance()}`));
+
+        if(signerBalance.gt(1)) {
+            console.log(green(`> Signer Balance: ${signerBalance.toString(2)}`));
+        }
+        else if (signerBalance.gt(0.1)) {
+            console.log(yellow(`> Signer Balance: ${signerBalance.toString(4)}`));
+        }
+        else {
+            console.log(red(`> WARNING! Low signer balance: ${signerBalance.toString(4)}`));
+        }
     }
 
     console.log(
@@ -176,8 +221,8 @@ function loadContracts(hre: HardhatRuntimeEnvironment, path: string, provider: E
 }
 
 async function printHelpfulInfo(ctx: InteractContext) {
-    if (ctx.pickedContract) {
-        console.log(gray.inverse(`${ctx.pickedContract} => ${ctx.contracts[ctx.pickedContract!].address}`));
+    if (ctx.pickContract) {
+        console.log(gray.inverse(`${ctx.pickContract} => ${ctx.contracts[ctx.pickContract!].address}`));
     }
 	console.log(gray(`  * Signer: ${await ctx.signer.getAddress()}`));
     console.log('\n');
@@ -199,34 +244,32 @@ async function pickContract(ctx: InteractContext) {
         },
     ]);
 
-    ctx.pickedContract = pickedContract;
+    ctx.pickContract = pickedContract;
 }
 
-async function pickMethod(ctx: InteractContext) {
-    await printHelpfulInfo(ctx);
-
-    const choices = _.keys(ctx.contracts[ctx.pickedContract!].functions).filter(f => f.indexOf('(') != -1).sort();
+async function pickFunction(ctx: InteractContext) {
+    const choices = _.keys(ctx.contracts[ctx.pickContract!].functions).filter(f => f.indexOf('(') != -1).sort();
     choices.unshift(PROMPT_BACK_OPTION);
 
-    const { pickedMethod } = await inquirer.prompt([
+    const { pickedFunction } = await inquirer.prompt([
         {
             type: 'search-list',
-            name: 'pickedMethod',
+            name: 'pickedFunction',
             message: 'Pick a FUNCTION:',
             choices
         },
     ]);
 
-    if (pickedMethod == PROMPT_BACK_OPTION) {
-        ctx.pickedContract = null;
+    if (pickedFunction == PROMPT_BACK_OPTION) {
+        ctx.pickContract = null;
     }
     else {
-        ctx.pickedMethod = pickedMethod;
+        ctx.pickFunction = pickedFunction;
     }
 }
 
 async function queryArgs(ctx: InteractContext) {
-    const functionInfo = ctx.contracts[ctx.pickedContract!].interface.getFunction(ctx.pickedMethod!);
+    const functionInfo = ctx.contracts[ctx.pickContract!].interface.getFunction(ctx.pickFunction!);
 
     const args: any[] = [];
 
@@ -255,32 +298,33 @@ async function queryArgs(ctx: InteractContext) {
     ctx.currentArgs = args;
 }
 
-async function executeSelection(ctx: InteractContext) {
-    const contract = ctx.contracts[ctx.pickedContract!];
-    const functionInfo = contract.interface.getFunction(ctx.pickedMethod!);
-    const callData = contract.interface.encodeFunctionData(ctx.pickedMethod!, ctx.currentArgs!);
+async function executeSelection(ctx: InteractContext, batch: boolean) {
+    const contract = ctx.contracts[ctx.pickContract!];
+    const functionInfo = contract.interface.getFunction(ctx.pickFunction!);
+    const callData = contract.interface.encodeFunctionData(ctx.pickFunction!, ctx.currentArgs!);
+
+    let returned: string|null = null;
 
     if (!functionInfo.constant) {
         let txn: ethers.PopulatedTransaction|null = {};
 
         // estimate gas
         try {
-            txn = await contract.populateTransaction[ctx.pickedMethod!](...ctx.currentArgs!, { from: await ctx.signer.getAddress() });
-            const estimatedGas = await contract.estimateGas[ctx.pickedMethod!](...ctx.currentArgs!, { from: await ctx.signer.getAddress() });
+            txn = await contract.populateTransaction[ctx.pickFunction!](...ctx.currentArgs!, { from: await ctx.signer.getAddress() });
+            const estimatedGas = await contract.estimateGas[ctx.pickFunction!](...ctx.currentArgs!, { from: await ctx.signer.getAddress() });
 
-            console.log(gray(`  > calldata: ${txn.data}`));
-            console.log(gray(`  > estimated gas required: ${estimatedGas}`));
-            console.log(gray(`  > gas: ${JSON.stringify(_.pick(txn, 'gasPrice', 'maxFeePerGas', 'maxPriorityFeePerGas'))}`));
-            console.log(green(bold('  ✅ txn will succeed')))
+            if (!batch) {
+                console.log(gray(`  > calldata: ${txn.data}`));
+                console.log(gray(`  > estimated gas required: ${estimatedGas}`));
+                console.log(gray(`  > gas: ${JSON.stringify(_.pick(txn, 'gasPrice', 'maxFeePerGas', 'maxPriorityFeePerGas'))}`));
+                console.log(green(bold('  ✅ txn will succeed')));
+            }
         } catch(err) {
-            console.log(red('Error: Could not populate transaction (is it failing?)'));
+            console.error(red('Error: Could not populate transaction (is it failing?)'));
         }
 
-        if (txn?.data) {
-
-        }
         // confirm
-        if (!(ctx.signer instanceof Ethers.VoidSigner)) {
+        if (!(ctx.signer instanceof Ethers.VoidSigner) && !batch) {
             const { confirmation } = await inquirer.prompt([
                 {
                     type: 'confirm',
@@ -290,7 +334,7 @@ async function executeSelection(ctx: InteractContext) {
             ]);
 
             if (!confirmation) {
-                ctx.pickedMethod = null;
+                ctx.pickFunction = null;
                 ctx.currentArgs = null;
                 return;
             }
@@ -303,31 +347,47 @@ async function executeSelection(ctx: InteractContext) {
                 value: ctx.txnValue.toBN()
             });
     
-            console.log('> hash: ', txInfo.hash);
-            console.log('confirming...');
+            if (!batch) {
+                console.log('> hash: ', txInfo.hash);
+                console.log('confirming...');
+            }
     
             const receipt = await txInfo.wait();
 
-            logTxSucceed(ctx, receipt);
+            if (!batch) {
+                logTxSucceed(ctx, receipt);
+            }
+            else {
+                console.log(receipt.transactionHash);
+            }
         } catch(err) {
             logTxFail(err);
         }
     }
     else {
-        const result = await contract.functions[ctx.pickedMethod!](...ctx.currentArgs!);
+        const result = await contract.functions[ctx.pickFunction!](...ctx.currentArgs!);
 
         for (let i = 0;i < (functionInfo.outputs?.length || 0);i++) {
             const output = functionInfo.outputs![i];
-            console.log(
-                cyan(`  ↪ ${output.name || ''}(${output.type}):`),
-                printReturnedValue(output, result[i])
-            );
+
+            if (batch) {
+                console.log(result[i].toString());
+                returned = result[0].toString();
+            }
+            else {
+                console.log(
+                    cyan(`  ↪ ${output.name || ''}(${output.type}):`),
+                    printReturnedValue(output, result[i])
+                );
+            }
         }
     }
 
     // return to function select
-    ctx.pickedMethod = null;
+    ctx.pickFunction = null;
     ctx.currentArgs = null;
+
+    return returned;
 }
 
 async function promptInputValue(input: Ethers.utils.ParamType): Promise<any> {
@@ -446,6 +506,16 @@ function logTxSucceed(ctx: InteractContext, receipt: Ethers.providers.Transactio
 
 				const parsedLog = logContract.interface.parseLog(log);
 				console.log(gray(`    log ${i}:`), cyan(parsedLog.name));
+             
+                for (let i = 0;i < (parsedLog.args.length || 0);i++) {
+                    const output = parsedLog.args[i];
+                    const paramType = logContract.interface.getEvent(parsedLog.name).inputs[i];
+
+                    console.log(
+                        cyan(`  ↪ ${output.name || ''}(${output.type}):`),
+                        printReturnedValue(paramType, output)
+                    );
+                }
 			} catch (err) {
 				console.log(gray(`    log ${i}: unable to decode log - ${JSON.stringify(log)}`));
 			}
