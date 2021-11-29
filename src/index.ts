@@ -10,11 +10,9 @@ import { red, bold, gray, green, yellow, cyan } from 'chalk';
 import "./type-extensions";
 import "@nomiclabs/hardhat-ethers";
 import { loadDeployments, normalizePath, normalizePathArray } from "./utils";
-import { JsonRpcProvider } from "@ethersproject/providers";
 
 import inquirer from 'inquirer';
-import { VoidSigner } from '@synthetixio/wei/node_modules/ethers';
-import Wei, { wei, WeiSource } from '@synthetixio/wei';
+import Wei, { wei } from '@synthetixio/wei';
 
 const PROMPT_BACK_OPTION = '↩ BACK';
 
@@ -282,7 +280,7 @@ async function executeSelection(ctx: InteractContext) {
 
         }
         // confirm
-        if (!(ctx.signer instanceof VoidSigner)) {
+        if (!(ctx.signer instanceof Ethers.VoidSigner)) {
             const { confirmation } = await inquirer.prompt([
                 {
                     type: 'confirm',
