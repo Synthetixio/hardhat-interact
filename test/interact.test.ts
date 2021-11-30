@@ -6,6 +6,7 @@ import { HardhatRuntimeEnvironment } from "hardhat/types";
 import path from "path";
 
 import inquirer from 'inquirer';
+import { readFileSync } from "fs";
 
 describe("Integration tests examples", function () {
 
@@ -54,15 +55,41 @@ describe("Integration tests examples", function () {
         expect(result).to.equal('0');
       });
 
-      it('can use batch mode for mutable transaction', async () => {
-        const signer = (await hre.ethers.getSigners())[0];
+      describe('write mode', () => {
+        it('can use batch mode for mutable transaction', async () => {
+          const signer = (await hre.ethers.getSigners())[0];
+  
+          await hre.run('interact', { batch: true, contract: 'WETH', func: 'deposit', value: 1.2, args: '[]' });
+  
+          // call interact again to get the amount deposited
+          const deposited = await hre.run('interact', { batch: true, contract: 'WETH', func: 'balanceOf', args: JSON.stringify([signer.address]) });
+  
+          expect(deposited).to.equal('1200000000000000000');
+        });
+      });
 
-        await hre.run('interact', { batch: true, contract: 'WETH', func: 'deposit', value: 1.2, args: '[]' });
+      describe('read only mode', () => {
+        it('can output staged transactions file', async () => {
+          const signer = (await hre.ethers.getSigners())[0];
+  
+          await hre.run('interact', {
+            batch: true, 
 
-        // call interact again to get the amount deposited
-        const deposited = await hre.run('interact', { batch: true, contract: 'WETH', func: 'balanceOf', args: JSON.stringify([signer.address]) });
+            publicKey: signer.address,
+            driver: 'gnosis-safe',
+            out: 'staged-txns.txt',
 
-        expect(deposited).to.equal('1200000000000000000');
+            contract: 'WETH', 
+            func: 'deposit', 
+            value: 1.2, 
+            args: '[]' 
+          });
+  
+          // should have output staged transactions file
+          const data = readFileSync('staged-txns.txt');
+  
+          expect(data.toString()).to.contain('send_custom');
+        });
       });
     })
   });

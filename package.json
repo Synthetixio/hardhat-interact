@@ -1,5 +1,5 @@
 {
-  "name": "@synthetixio/hardhat-interact",
+  "name": "hardhat-interact",
   "version": "0.1.0",
   "description": "Execute commands on deployed contracts using a helpful TUI. Inspired by `hardhat interact` command on https://github.com/Synthetixio/synthetix",
   "repository": "github:Synthetixio/hardhat-interact",
