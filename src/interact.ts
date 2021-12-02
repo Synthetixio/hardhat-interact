@@ -336,8 +336,6 @@ subtask('interact:pick-function', 'Shows an interactive UI to select a function 
         },
     ]);
 
-    console.log('PICKED FUNCTION', pickedFunction);
-
     return pickedFunction == PROMPT_BACK_OPTION ? null : pickedFunction;
 });
 
