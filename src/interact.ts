@@ -151,6 +151,7 @@ task('interact', 'Call contracts with CLI')
                     contract,
                     functionSignature: ctx.pickFunction,
                     args: ctx.currentArgs,
+                    blockTag: ctx.blockTag,
                     log: !args.batch
                 });
             }
@@ -372,19 +373,18 @@ subtask('interact:query', 'Executes a read-only query, returning the result')
 .addParam('contract', 'Interact context', null, types.any)
 .addParam('functionSignature', 'Which function to query')
 .addParam('args', 'Array of arguments to the function call', null, types.any)
+.addOptionalParam('blockTag', 'Perform archive query on the given block tag', 'latest', types.any)
 .addParam('log', 'Set to `true` to print diagnostic and user-friendly info', false, types.boolean)
-.setAction(async ({ contract, functionSignature, args, log }: { contract: ethers.Contract, functionSignature: string, args: any[], log: boolean }, hre: HardhatRuntimeEnvironment) => {
+.setAction(async ({ contract, functionSignature, args, blockTag, log }: { contract: ethers.Contract, functionSignature: string, args: any[], blockTag: number, log: boolean }, hre: HardhatRuntimeEnvironment) => {
 
     const functionInfo = contract.interface.getFunction(functionSignature);
 
     let result = [];
     try {
-        result = await contract.functions[functionSignature!](...args);
+        result = await contract.functions[functionSignature!](...args, { blockTag });
     } catch(err) {
         console.error(err);
     }
-
-    console.log('result', result);
 
     if (log) {
         for (let i = 0;i < (functionInfo.outputs?.length || 0);i++) {
