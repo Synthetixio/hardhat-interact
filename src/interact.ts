@@ -452,7 +452,7 @@ subtask('interact:execute', 'Executes a mutable txn and wait for it to complete,
         }
 
         // write a staged transaction
-        hre.run('interact:stage-txn', { txn, out });
+        await hre.run('interact:stage-txn', { txn, contract, functionSignature, args, value, out });
 
         if (log)
             console.log(`> staged transaction appended to ${out}`)
@@ -506,6 +506,10 @@ subtask('interact:execute', 'Executes a mutable txn and wait for it to complete,
 
 subtask('interact:stage-txn', 'Executes a mutable txn and wait for it to complete, or appends it to staged transactions, returning diagnostic information as necessary')
 .addParam('txn', 'Transaction to stage', null, types.any)
+.addParam('contract', 'Interact context', null, types.any)
+.addParam('functionSignature', 'Which function to query')
+.addParam('args', 'Array of arguments to the function call', null, types.any)
+.addOptionalParam('value', 'Amount of eth to send to a payable function', Ethers.constants.Zero, types.any)
 .addOptionalParam('out', 'File to export staged transactions to', 'staged-txns.txt')
 .setAction(async ({ txn, out }: { txn: Ethers.PopulatedTransaction, out: string }) => {
     appendFileSync(out, `${stagedTransactions.csv(txn)}\n`);
