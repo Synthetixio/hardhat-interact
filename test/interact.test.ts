@@ -8,7 +8,7 @@ import path from "path";
 import inquirer from 'inquirer';
 import { readFileSync } from "fs";
 
-describe("Integration tests examples", function () {
+describe("task interact", function () {
 
   let hre: HardhatRuntimeEnvironment
 
@@ -22,7 +22,7 @@ describe("Integration tests examples", function () {
   });
 
 
-  describe("task interact", function () {
+  describe("interact", function () {
 
     it('task is defined and has correct properties', () => {
       expect(hre.tasks['interact']).to.exist;
@@ -38,7 +38,7 @@ describe("Integration tests examples", function () {
 
         const result = await hre.run('interact', { batch: true, contract: 'WETH', func: 'balanceOf(address)', args: JSON.stringify([ethers.constants.AddressZero]) });
 
-        expect(result).to.equal('0');
+        expect(result[0].toString()).to.equal('0');
       });
 
       it('starts up and asks for contract and function', async () => {
@@ -52,7 +52,7 @@ describe("Integration tests examples", function () {
 
         const result = await hre.run('interact', { batch: true });
 
-        expect(result).to.equal('0');
+        expect(result[0].toString()).to.equal('0');
       });
 
       describe('write mode', () => {
@@ -64,7 +64,7 @@ describe("Integration tests examples", function () {
           // call interact again to get the amount deposited
           const deposited = await hre.run('interact', { batch: true, contract: 'WETH', func: 'balanceOf', args: JSON.stringify([signer.address]) });
   
-          expect(deposited).to.equal('1200000000000000000');
+          expect(deposited[0].toString()).to.equal('1200000000000000000');
         });
       });
 
@@ -75,8 +75,8 @@ describe("Integration tests examples", function () {
           await hre.run('interact', {
             batch: true, 
 
-            publicKey: signer.address,
-            driver: 'gnosis-safe',
+            impersonate: signer.address,
+            driver: 'csv',
             out: 'staged-txns.txt',
 
             contract: 'WETH', 
@@ -88,7 +88,7 @@ describe("Integration tests examples", function () {
           // should have output staged transactions file
           const data = readFileSync('staged-txns.txt');
   
-          expect(data.toString()).to.contain('send_custom');
+          expect(data.toString()).to.contain('0x5FbDB2315678afecb367f032d93F642f64180aa3,0,0xd0e30db0');
         });
       });
     })
