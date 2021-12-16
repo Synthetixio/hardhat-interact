@@ -5,7 +5,7 @@ import { resetHardhatContext } from "hardhat/plugins-testing";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import path from "path";
 
-import inquirer from 'inquirer';
+import prompts from 'prompts';
 import { readFileSync } from "fs";
 
 describe("task interact", function () {
@@ -43,7 +43,7 @@ describe("task interact", function () {
 
       it('starts up and asks for contract and function', async () => {
 
-        const promptStub = sinon.stub(inquirer, 'prompt');
+        const promptStub = sinon.stub(prompts , 'prompt');
         
         promptStub
           .onCall(0).returns({ pickedContract: 'WETH' })

@@ -11,13 +11,13 @@ import "./type-extensions";
 import "@nomiclabs/hardhat-ethers";
 import { loadDeployments, normalizePath, normalizePathArray } from "./utils";
 
-import inquirer from 'inquirer';
+import prompts from 'prompts';
 import Wei, { wei } from '@synthetixio/wei';
 import { appendFileSync } from 'fs';
 
 import stagedTransactions from './staged-transactions';
 
-const PROMPT_BACK_OPTION = '↩ BACK';
+const PROMPT_BACK_OPTION = { title: '↩ BACK' };
 
 extendConfig(
     (config: HardhatConfig, userConfig: Readonly<HardhatUserConfig>) => {
@@ -96,8 +96,6 @@ task('interact', 'Call contracts with CLI')
 
     const ctx = await buildInteractContext(hre, args);
 
-    inquirer.registerPrompt('search-list', require('inquirer-search-list'));
-
     // -----------------
     // Start interaction
     // -----------------
@@ -109,15 +107,17 @@ task('interact', 'Call contracts with CLI')
     while (true) {
         if (!ctx.pickContract) {
             ctx.pickContract = await hre.run('interact:pick-contract', { contractNames: _.keys(ctx.contracts) });
+
+            if (!ctx.pickContract) {
+                return null;
+            }
         }
         else if (!ctx.pickFunction) {
             if (!args.batch) {
                 await printHelpfulInfo(ctx);
             }
 
-            const functionSignatures = _.keys(ctx.contracts[ctx.pickContract!].functions).filter(f => f.indexOf('(') != -1)
-
-            ctx.pickFunction = await hre.run('interact:pick-function', { functionSignatures });
+            ctx.pickFunction = await hre.run('interact:pick-function', { contract: ctx.contracts[ctx.pickContract] });
 
             if (!ctx.pickFunction) {
                 ctx.pickContract = null;
@@ -302,13 +302,14 @@ subtask('interact:load-contracts', 'Returns `ethers.Contract` objects which can 
 
 subtask('interact:pick-contract', 'Shows an interactive UI to select a contract. The selected contract name is returned')
 .addParam('contractNames', 'Name of contracts which can be selected', null, types.any)
-.setAction(async ({ contractNames }: { contractNames: string [] }) => {
-    const { pickedContract } = await inquirer.prompt([
+.addParam('contracts', 'Name of contracts which can be selected', null, types.any)
+.setAction(async ({ contractNames }: { contractNames: string[] }) => {
+    const { pickedContract } = await prompts.prompt([
         {
-            type: 'search-list',
+            type: 'autocomplete',
             name: 'pickedContract',
             message: 'Pick a CONTRACT:',
-            choices: contractNames.sort()
+            choices: contractNames.sort().map((s) => ({title: s }))
         },
     ]);
 
@@ -316,21 +317,23 @@ subtask('interact:pick-contract', 'Shows an interactive UI to select a contract.
 });
 
 subtask('interact:pick-function', 'Shows an interactive UI to select a function to execute. The selected function signature is returned')
-.addParam('functionSignatures', 'Signatures of the functions which can be selected', null, types.any)
-.setAction(async ({ functionSignatures }: { functionSignatures: string [] }) => {
-    const choices = functionSignatures.sort();
+.addParam('contract', 'Contract to select function from', null, types.any)
+.setAction(async ({ contract }: { contract: ethers.Contract }) => {
+    const functionSignatures = _.keys(contract.functions).filter(f => f.indexOf('(') != -1)
+
+    const choices = functionSignatures.sort().map((s) => ({title: s }));
     choices.unshift(PROMPT_BACK_OPTION);
 
-    const { pickedFunction } = await inquirer.prompt([
+    const { pickedFunction } = await prompts.prompt([
         {
-            type: 'search-list',
+            type: 'autocomplete',
             name: 'pickedFunction',
             message: 'Pick a FUNCTION:',
             choices
         },
     ]);
 
-    return pickedFunction == PROMPT_BACK_OPTION ? null : pickedFunction;
+    return pickedFunction == PROMPT_BACK_OPTION.title ? null : pickedFunction;
 });
 
 subtask('interact:pick-function-args', 'Shows an interactive UI to specify the arguments (and if its payable, the eth to send) for a function. The arguments array is returned')
@@ -340,7 +343,7 @@ subtask('interact:pick-function-args', 'Shows an interactive UI to specify the a
     let value: ethers.BigNumber = wei(0).toBN();
 
     if (func.payable) {
-        const { txnValue } = await inquirer.prompt([
+        const { txnValue } = await prompts.prompt([
             {
                 type: 'number',
                 name: 'txnValue',
@@ -354,6 +357,10 @@ subtask('interact:pick-function-args', 'Shows an interactive UI to specify the a
     for (const input of func.inputs) {
 
         let rawValue = await promptInputValue(input);
+
+        if (!rawValue) {
+            return null;
+        }
 
         args.push(rawValue);
     }
@@ -375,7 +382,8 @@ subtask('interact:query', 'Executes a read-only query, returning the result')
     try {
         result = await contract.functions[functionSignature!](...args, { blockTag });
     } catch(err) {
-        console.error(err);
+        console.error('failed query:', err);
+        return null;
     }
 
     if (log) {
@@ -432,7 +440,7 @@ subtask('interact:execute', 'Executes a mutable txn and wait for it to complete,
     if (impersonate) {
 
         if (log) {
-            const { confirmation } = await inquirer.prompt([
+            const { confirmation } = await prompts.prompt([
                 {
                     type: 'confirm',
                     name: 'confirmation',
@@ -454,7 +462,7 @@ subtask('interact:execute', 'Executes a mutable txn and wait for it to complete,
     else if (signer != null) {
 
         if (log) {
-            const { confirmation } = await inquirer.prompt([
+            const { confirmation } = await prompts.prompt([
                 {
                     type: 'confirm',
                     name: 'confirmation',
@@ -512,17 +520,21 @@ subtask('interact:stage-txn', 'Executes a mutable txn and wait for it to complet
 async function promptInputValue(input: Ethers.utils.ParamType): Promise<any> {
     const name = input.name || input.type;
 
-    let message = input.name ? input.name : `${input.name} (${input.type})`;
+    let message = input.name ? `${input.name} (${input.type})` : input.type;
 
     for(let i = 0;i < 5;i++) {
         try {
-            const answer = await inquirer.prompt([
+            const answer = await prompts.prompt([
                 {
-                    type: 'input',
+                    type: 'text',
                     message,
                     name,
                 },
             ]);
+
+            if (!answer[name]) {
+                return null;
+            }
 
             // if there is a problem this will throw and user will be forced to re-enter data
             return parseInput(input, answer[name]);
