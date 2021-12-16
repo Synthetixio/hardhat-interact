@@ -41,12 +41,6 @@ extendConfig(
         }
     }
 );
-
-task('import-contract', 'Import a contract from etherscan to be used by interact')
-.setAction(async (args, hre) => {
-
-});
-
 interface InteractContext {
     hre: HardhatRuntimeEnvironment;
     contracts: {[name: string]: Ethers.Contract};
@@ -162,6 +156,7 @@ task('interact', 'Call contracts with CLI')
                     args: ctx.currentArgs,
                     value: ctx.txnValue.toBN(),
                     log: !args.batch,
+                    signer: ctx.signer,
                     impersonate: ctx.impersonate || undefined
                 });
             }
@@ -231,7 +226,6 @@ async function printHeader(ctx: InteractContext) {
     // and prevents the UI from lurching later if its queried later
     const signerBalance = ctx.signer ? wei(await ctx.signer.getBalance()) : wei(0);
 
-    console.clear();
     console.log(green(`Interact CLI`));
     console.log(gray('Please review this information:'));
     console.log(
@@ -518,38 +512,32 @@ subtask('interact:stage-txn', 'Executes a mutable txn and wait for it to complet
 async function promptInputValue(input: Ethers.utils.ParamType): Promise<any> {
     const name = input.name || input.type;
 
-    let message = name;
+    let message = input.name ? input.name : `${input.name} (${input.type})`;
 
+    for(let i = 0;i < 5;i++) {
+        try {
+            const answer = await inquirer.prompt([
+                {
+                    type: 'input',
+                    message,
+                    name,
+                },
+            ]);
+
+            // if there is a problem this will throw and user will be forced to re-enter data
+            return parseInput(input, answer[name]);
+        } catch(err) {
+            console.error('invalid input: ', err);
+        }
+    }
+}
+
+function parseInput(input: Ethers.utils.ParamType, rawValue: string): any {
     const requiresBytes32Util = input.type.includes('bytes32');
     const isArray = input.type.includes('[]');
     const isNumber = input.type.includes('int');
 
-    if (requiresBytes32Util) {
-        message = `${message} (uses toBytes32${
-            isArray ? ' - if array, use ["a","b","c"] syntax' : ''
-        })`;
-    }
-
-    const answer = await inquirer.prompt([
-        {
-            type: 'input',
-            message,
-            name,
-        },
-    ]);
-
-    let processed = answer[name];
-    console.log(gray('  > raw inputs:', processed));
-
-    if (isArray) {
-        try {
-            processed = JSON.parse(processed);
-        } catch (err) {
-            console.log(red(`Error parsing array input. Please use the indicated syntax.`));
-            return promptInputValue(input);
-        }
-    }
-
+    let processed = isArray ? JSON.parse(rawValue) : rawValue;
     if (requiresBytes32Util) {
         if (isArray) {
             processed = processed.map((item: string) => Ethers.utils.formatBytes32String(item));
@@ -572,10 +560,17 @@ async function promptInputValue(input: Ethers.utils.ParamType): Promise<any> {
         processed = boolify(processed);
     }
 
-    console.log(
-        gray(`  > processed inputs (${isArray ? processed.length : '1'}):`, processed)
-    );
+    //const processed = preprocessInput(input, type, hre);
+    if (processed !== rawValue) {
 
+        console.log(
+            gray(`  > processed inputs (${isArray ? processed.length : '1'}):`, processed)
+        );
+    }
+  
+    // Encode user's input to validate it
+    Ethers.utils.defaultAbiCoder.encode([input.type], [processed]);
+  
     return processed;
 }
 

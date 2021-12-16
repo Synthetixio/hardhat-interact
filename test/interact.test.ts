@@ -43,7 +43,7 @@ describe("task interact", function () {
 
       it('starts up and asks for contract and function', async () => {
 
-        const promptStub = sinon.stub(inquirer, 'prompt')
+        const promptStub = sinon.stub(inquirer, 'prompt');
         
         promptStub
           .onCall(0).returns({ pickedContract: 'WETH' })
