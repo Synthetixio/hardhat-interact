@@ -1,5 +1,9 @@
 import { expect } from "chai";
 import sinon from 'sinon';
+<<<<<<< HEAD
+=======
+import { ethers } from "ethers";
+>>>>>>> 2d44d2ec1967683cafba3176cc8c01d9e31a67d9
 import { resetHardhatContext } from "hardhat/plugins-testing";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import path from "path";
