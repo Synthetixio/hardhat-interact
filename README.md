@@ -63,6 +63,22 @@ Follow the on-screen instructions to select a contract, then a function, and fin
 
 The interact command supports a few command line arguments. To see an updated list, use `npx hardhat interact --help`.
 
+### The `import-contracts` task
+
+It is often desirable to pull arbitrary 3rd party contract definitions into your project in order to interact with them. To simplify this process,
+`hardhat-interact` bundles a command, `import-contracts` to read the definitions from etherscan and insert them into your deployment directory for immediate use.
+
+To use, you just need the contract address:
+
+```
+$ npx hardhat --network mainnet import-contract 0x7c22547779c8aa41bae79e03e8383a0befbcecf0
+contract deployment artifact Wrapper.json written successfully
+```
+
+Now you can use the contract with `interact` like you would any other.
+
+For more options, use `--help`.
+
 ## Configuration
 
 This plugin extends the `ProjectPathsUserConfig` object with an optional
