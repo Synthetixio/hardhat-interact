@@ -309,7 +309,8 @@ subtask('interact:pick-contract', 'Shows an interactive UI to select a contract.
             type: 'autocomplete',
             name: 'pickedContract',
             message: 'Pick a CONTRACT:',
-            choices: contractNames.sort().map((s) => ({title: s }))
+            choices: contractNames.sort().map((s) => ({title: s })),
+            suggest: suggestBySubtring
         },
     ]);
 
@@ -329,7 +330,8 @@ subtask('interact:pick-function', 'Shows an interactive UI to select a function 
             type: 'autocomplete',
             name: 'pickedFunction',
             message: 'Pick a FUNCTION:',
-            choices
+            choices,
+            suggest: suggestBySubtring
         },
     ]);
 
@@ -681,3 +683,19 @@ function logTxFail(error: any) {
 
 	console.log(gray(JSON.stringify(error, null, 2)));
 }
+
+// filters choices by subtrings that don't have to be continuous e.g. 'ybtc' will match 'SynthsBTC'
+const suggestBySubtring = (input: string, choices: [{ title: string }]) =>
+Promise.resolve(choices.filter(choice => { 
+    const titleStr = choice.title.toLowerCase();
+    let index = 0;
+    for (let c of input.toLowerCase()) {
+        index = titleStr.indexOf(c, index);
+        if (index === -1) {
+            return false; // not found
+        } else {
+            index += 1; // start from next index
+        }
+    }
+    return true;
+}))
