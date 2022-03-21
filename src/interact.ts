@@ -596,11 +596,15 @@ function parseWeiValue(v: string): Ethers.BigNumber {
 }
 
 function printReturnedValue(output: Ethers.utils.ParamType, value: any): string {
-    if (Array.isArray(value)) {
-        return value.map(item => printReturnedValue(item, output.baseType)).join(', ');
-    } else if (output.type.startsWith('uint') || output.type.startsWith('int')) {
+    if (output?.baseType === 'tuple') {  // handle structs        
+        return '\n' + output?.components.map(
+            (comp, ind) => `${comp.name}: ${printReturnedValue(comp, value[ind])}`
+        ).join('\n');
+    } else if (output?.baseType === 'array' && Array.isArray(value)) {  // handle arrays
+        return value.map(item => printReturnedValue(output.arrayChildren, item)).join(', ');
+    } else if (output?.type.startsWith('uint') || output?.type.startsWith('int')) {
         return `${value.toString()} (${wei(value).toString(5)})`;
-    } else if (output.type.startsWith('bytes')) {
+    } else if (output?.type.startsWith('bytes')) {
         return `${value} (${Buffer.from(value.slice(2), 'hex').toString('utf8')})`;
     } else {
         return value;
