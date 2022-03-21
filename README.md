@@ -100,7 +100,7 @@ module.exports = {
 In order to work on the plugin vs. a real set of contracts (e.g. Synthetix contracts):
 
 1. git clone and npm install this repo
-2. in one terminal run `npm run watch` to build on changes
+2. in one terminal, in this repo's folder, run `npm run watch` to build on changes
 3. in the repo that's using the plugin change `require('hardhat-interact');` to `require('/path/to/your/local/hardhat-interact/dist/src');`
 4. in second terminal run the chain (e.g. mainnet fork) with the contracts (e.g. `npm run fork:ovm` in synthetix folder)
-5. finally, in third terminal run the interact tool e.g. `npx hardhat --network mainnet-ovm interact --provider-url http://localhost:8545`
+5. finally, in third terminal (in the synthetix folder) run the interact tool e.g. `npx hardhat --network mainnet-ovm interact --provider-url http://localhost:8545`
