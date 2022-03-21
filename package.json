@@ -1,6 +1,6 @@
 {
   "name": "hardhat-interact",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Execute commands on deployed contracts using a helpful TUI. Inspired by `hardhat interact` command on https://github.com/Synthetixio/synthetix",
   "repository": "github:Synthetixio/hardhat-interact",
   "author": "Daniel Beal",
