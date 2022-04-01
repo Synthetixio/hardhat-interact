@@ -309,7 +309,8 @@ subtask('interact:pick-contract', 'Shows an interactive UI to select a contract.
             type: 'autocomplete',
             name: 'pickedContract',
             message: 'Pick a CONTRACT:',
-            choices: contractNames.sort().map((s) => ({title: s }))
+            choices: contractNames.sort().map((s) => ({title: s })),
+            suggest: suggestBySubtring
         },
     ]);
 
@@ -329,7 +330,8 @@ subtask('interact:pick-function', 'Shows an interactive UI to select a function 
             type: 'autocomplete',
             name: 'pickedFunction',
             message: 'Pick a FUNCTION:',
-            choices
+            choices,
+            suggest: suggestBySubtring
         },
     ]);
 
@@ -596,11 +598,15 @@ function parseWeiValue(v: string): Ethers.BigNumber {
 }
 
 function printReturnedValue(output: Ethers.utils.ParamType, value: any): string {
-    if (Array.isArray(value)) {
-        return value.map(item => printReturnedValue(item, output.baseType)).join(', ');
-    } else if (output.type.startsWith('uint') || output.type.startsWith('int')) {
+    if (output?.baseType === 'tuple') {  // handle structs        
+        return '\n' + output?.components.map(
+            (comp, ind) => `${comp.name}: ${printReturnedValue(comp, value[ind])}`
+        ).join('\n');
+    } else if (output?.baseType === 'array' && Array.isArray(value)) {  // handle arrays
+        return value.map(item => printReturnedValue(output.arrayChildren, item)).join(', ');
+    } else if (output?.type.startsWith('uint') || output?.type.startsWith('int')) {
         return `${value.toString()} (${wei(value).toString(5)})`;
-    } else if (output.type.startsWith('bytes')) {
+    } else if (output?.type.startsWith('bytes')) {
         return `${value} (${Buffer.from(value.slice(2), 'hex').toString('utf8')})`;
     } else {
         return value;
@@ -677,3 +683,19 @@ function logTxFail(error: any) {
 
 	console.log(gray(JSON.stringify(error, null, 2)));
 }
+
+// filters choices by subtrings that don't have to be continuous e.g. 'ybtc' will match 'SynthsBTC'
+const suggestBySubtring = (input: string, choices: [{ title: string }]) =>
+Promise.resolve(choices.filter(choice => { 
+    const titleStr = choice.title.toLowerCase();
+    let index = 0;
+    for (let c of input.toLowerCase()) {
+        index = titleStr.indexOf(c, index);
+        if (index === -1) {
+            return false; // not found
+        } else {
+            index += 1; // start from next index
+        }
+    }
+    return true;
+}))
