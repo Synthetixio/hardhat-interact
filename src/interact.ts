@@ -546,6 +546,14 @@ async function promptInputValue(input: Ethers.utils.ParamType): Promise<any> {
     }
 }
 
+function parseBytes32(input: string) {
+    if (input.match(/^0x[0-9a-fA-F]*$/)) {
+        return Ethers.utils.formatBytes32String(input);
+    } else {
+        return input;
+    }
+}
+
 function parseInput(input: Ethers.utils.ParamType, rawValue: string): any {
     const requiresBytes32Util = input.type.includes('bytes32');
     const isArray = input.type.includes('[]');
@@ -554,9 +562,9 @@ function parseInput(input: Ethers.utils.ParamType, rawValue: string): any {
     let processed = isArray ? JSON.parse(rawValue) : rawValue;
     if (requiresBytes32Util) {
         if (isArray) {
-            processed = processed.map((item: string) => Ethers.utils.formatBytes32String(item));
+            processed = processed.map((item: string) => parseBytes32(item));
         } else {
-            processed = Ethers.utils.formatBytes32String(processed);
+            processed = parseBytes32(processed);
         }
     }
 
