@@ -13,7 +13,7 @@ import { loadDeployments, normalizePath, normalizePathArray } from "./utils";
 
 import prompts from 'prompts';
 import Wei, { wei } from '@synthetixio/wei';
-import { appendFileSync } from 'fs';
+import fs, { appendFileSync } from 'fs';
 
 import stagedTransactions from './staged-transactions';
 
@@ -73,6 +73,8 @@ interface InteractTaskArgs {
     func: string;
     value: string;
     args: string;
+    address: string;
+    abiPath: string;
 }
 
 task('interact', 'Call contracts with CLI')
@@ -87,6 +89,8 @@ task('interact', 'Call contracts with CLI')
 .addOptionalParam('func', 'Function to execute')
 .addOptionalParam('value', 'Amount ETH to send to payable function (in ETH units)', 0, types.float)
 .addOptionalParam('args', 'Arguments for contract and function to execute (json formatted)', '', types.string)
+.addOptionalPositionalParam('address', 'Contract address to interact with')
+.addOptionalPositionalParam('abiPath', 'Contract ABI in JSON format')
 .setAction(async (args, hre) => {
 
     if (args.privateKey && args.impersonate) {
@@ -173,7 +177,7 @@ task('interact', 'Call contracts with CLI')
 });
 
 async function buildInteractContext(hre: HardhatRuntimeEnvironment, args: InteractTaskArgs): Promise<InteractContext> {
-    let { providerUrl, privateKey, impersonate, blockTag } = args;
+    let { providerUrl, privateKey, impersonate, blockTag, address, abiPath } = args;
 
     // load private key
     const envPrivateKey = process.env.DEPLOY_PRIVATE_KEY;
@@ -198,8 +202,26 @@ async function buildInteractContext(hre: HardhatRuntimeEnvironment, args: Intera
         }
     }
 
-    // load contracts
-    const contracts = await hre.run('interact:load-contracts', { provider });
+    let contracts;
+    let pickedName;
+    if (address) {
+        if (abiPath) {
+            // Single contract load
+            const truncatedAddress = `${address.slice(0, 5)}...${address.slice(-5, address.length)}`;
+            const filename = abiPath.replace(/^.*[\\\/]/, '');
+            pickedName = `${truncatedAddress} (${filename})`;
+
+            const abiFile = JSON.parse(fs.readFileSync(abiPath, 'utf8'));
+            contracts = {[pickedName]: new hre.ethers.Contract(address, abiFile.abi, provider)}
+        } 
+        else {
+            throw red('ABI must be provided when loading an address');
+        }
+    } 
+    else {
+        // Deployment folder load
+        contracts = await hre.run('interact:load-contracts', { provider });
+    }
 
     return {
         contracts,
@@ -212,7 +234,7 @@ async function buildInteractContext(hre: HardhatRuntimeEnvironment, args: Intera
         stagedTransactionDriver: args.driver ? stagedTransactions[args.driver as keyof typeof stagedTransactions] : null,
         stagedTransactionOutputFile: args.out || null,
 
-        pickContract: args.contract || null,
+        pickContract: pickedName || args.contract || null,
         pickFunction: args.func || null,
         currentArgs: args.args ? JSON.parse(args.args) : null,
         txnValue: wei(args.value || 0),
