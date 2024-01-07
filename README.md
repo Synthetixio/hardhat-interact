@@ -11,7 +11,7 @@ This plugin implements a CLI to allow you to run read or write queries against y
 ## Installation
 
 ```bash
-npm install --save-dev hardhat-interact @nomiclabs/hardhat-ethers
+npm install --save-dev hardhat-interact @nomicfoundation/hardhat-ethers
 ```
 
 Import the plugin in your `hardhat.config.js`:
@@ -28,7 +28,7 @@ import "hardhat-interact";
 
 ## Required plugins
 
-- [@nomiclabs/hardhat-ethers](https://github.com/nomiclabs/hardhat/tree/master/packages/hardhat-ethers)
+- [@nomicfoundation/hardhat-ethers](https://github.com/nomicfoundation/hardhat/tree/master/packages/hardhat-ethers)
 
 ## Tasks
 

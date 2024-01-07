@@ -5,5 +5,5 @@ import gnosisSafe from './gnosis-safe';
 export default {
     csv,
     curl,
-    'gnosis-safe': gnosisSafe
-}
+    'gnosis-safe': gnosisSafe,
+};

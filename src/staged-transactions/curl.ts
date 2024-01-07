@@ -1,6 +1,5 @@
-import { ethers } from "ethers";
+import { ethers } from 'ethers';
 
-
-export default function stageCurlRpc(txn: ethers.PopulatedTransaction): string {
+export default function stageCurlRpc(txn: ethers.ContractTransaction): string {
     throw new Error('Not implemented');
 }
