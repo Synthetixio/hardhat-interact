@@ -7,10 +7,11 @@ import { appendFileSync } from 'fs';
 import { extendConfig, subtask, task, types } from 'hardhat/config';
 import { HardhatConfig, HardhatRuntimeEnvironment, HardhatUserConfig } from 'hardhat/types';
 import _ from 'lodash';
+import path from 'path';
 import prompts from 'prompts';
 
 import stagedTransactions from './staged-transactions';
-import { loadDeployments, normalizePath, normalizePathArray } from './utils';
+import { loadHardhatIgnition, loadHardhatDeploy, normalizePath, normalizePathArray } from './utils';
 
 const PROMPT_BACK_OPTION = { title: '↩ BACK' };
 
@@ -238,8 +239,21 @@ async function printHeader(ctx: InteractContext) {
     console.log('\n');
 }
 
-function loadContracts(hre: HardhatRuntimeEnvironment, path: string, provider: Ethers.Provider): { [name: string]: Ethers.Contract } {
-    const deployments = loadDeployments(path, hre.network.name, true);
+function loadHardhatDeployContracts(
+    hre: HardhatRuntimeEnvironment,
+    deploymentsPath: string,
+    provider: Ethers.Provider
+): { [name: string]: Ethers.Contract } {
+    const deployments = loadHardhatDeploy(deploymentsPath, hre.network, true);
+    return _.mapValues(deployments, d => new hre.ethers.Contract(d.address, d.abi, provider));
+}
+function loadHardhatIgnitionContracts(
+    hre: HardhatRuntimeEnvironment,
+    deploymentsPath: string,
+    provider: Ethers.Provider,
+    chainId: number
+): { [name: string]: Ethers.Contract } {
+    const deployments = loadHardhatIgnition(deploymentsPath, hre.network, chainId.toString());
     return _.mapValues(deployments, d => new hre.ethers.Contract(d.address, d.abi, provider));
 }
 
@@ -260,19 +274,41 @@ async function printHelpfulInfo(ctx: InteractContext) {
 subtask('interact:load-contracts', 'Returns `ethers.Contract` objects which can be queried or executed against for this project')
     .addOptionalParam('provider', 'ethers.Provider which should be attached to the contract', null, types.any)
     .setAction(async ({ provider }: { provider: Ethers.Provider }, hre) => {
-        const deploymentPaths = [];
-        deploymentPaths.push(hre.config.paths.deployments);
+        // hardhat-deploy and hardhat-ignition use different standards for representing deployed contracts on disk
+        // we try both to support whichever is being used
+        let contracts = {};
 
-        if (hre.config.external.deployments && hre.config.external.deployments[hre.network.name]) {
-            deploymentPaths.push(...hre.config.external.deployments[hre.network.name]);
+        // hardhat-deploy
+        {
+            const deploymentPaths = [];
+            deploymentPaths.push(hre.config.paths.deployments);
+
+            if (hre.config.external.deployments && hre.config.external.deployments[hre.network.name]) {
+                deploymentPaths.push(...hre.config.external.deployments[hre.network.name]);
+            }
+            for (const deploymentPath of deploymentPaths) {
+                contracts = {
+                    ...contracts,
+                    ...loadHardhatDeployContracts(hre, deploymentPath, provider),
+                };
+            }
         }
 
-        let contracts = {};
-        for (const path of deploymentPaths) {
-            contracts = {
-                ...contracts,
-                ...loadContracts(hre, path, provider),
-            };
+        // hardhat-ignition
+        {
+            const chainId = Number(
+                await hre.network.provider.request({
+                    method: 'eth_chainId',
+                })
+            );
+            if (hre.config.paths.ignition != null) {
+                const deploymentsPath = path.join(hre.config.paths.ignition, 'deployments');
+
+                contracts = {
+                    ...contracts,
+                    ...loadHardhatIgnitionContracts(hre, deploymentsPath, provider, chainId),
+                };
+            }
         }
 
         return contracts;

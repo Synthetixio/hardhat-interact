@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { HardhatConfig } from 'hardhat/types';
+import { HardhatConfig, Network } from 'hardhat/types';
 import path from 'path';
 
 export function normalizePathArray(config: HardhatConfig, paths: string[]): string[] {
@@ -57,15 +57,15 @@ export const traverse = function (
     return result;
 };
 
-export function loadDeployments(
+export function loadHardhatDeploy(
     deploymentsPath: string,
-    subPath: string,
+    network: Network,
     onlyABIAndAddress?: boolean,
     expectedChainId?: string,
     truffleChainId?: string
 ): { [name: string]: { address: string; abi: any } } {
     const deploymentsFound: { [name: string]: any } = {};
-    const deployPath = path.join(deploymentsPath, subPath);
+    const deployPath = path.join(deploymentsPath, network.name);
 
     let filesStats;
     try {
@@ -74,19 +74,19 @@ export function loadDeployments(
         // console.log('no folder at ' + deployPath);
         return {};
     }
-    if (filesStats.length > 0) {
-        if (expectedChainId) {
-            const chainIdFilepath = path.join(deployPath, '.chainId');
-            if (fs.existsSync(chainIdFilepath)) {
-                const chainIdFound = fs.readFileSync(chainIdFilepath).toString().trim();
-                if (expectedChainId !== chainIdFound) {
-                    throw new Error(
-                        `Loading deployment in folder '${deployPath}' (with chainId: ${chainIdFound}) for a different chainId (${expectedChainId})`
-                    );
-                }
-            } else {
-                throw new Error("with hardhat-deploy >= 0.6 you are expected to create a '.chainId' file in the deployment folder");
+    if (filesStats.length === 0) return {};
+
+    if (expectedChainId) {
+        const chainIdFilepath = path.join(deployPath, '.chainId');
+        if (fs.existsSync(chainIdFilepath)) {
+            const chainIdFound = fs.readFileSync(chainIdFilepath).toString().trim();
+            if (expectedChainId !== chainIdFound) {
+                throw new Error(
+                    `Loading deployment in folder '${deployPath}' (with chainId: ${chainIdFound}) for a different chainId (${expectedChainId})`
+                );
             }
+        } else {
+            throw new Error("with hardhat-deploy >= 0.6 you are expected to create a '.chainId' file in the deployment folder");
         }
     }
     let fileNames: string[] = filesStats.map(a => a.relativePath);
@@ -127,4 +127,62 @@ export function loadDeployments(
         }
     }
     return deploymentsFound;
+}
+export function loadHardhatIgnition(
+    deploymentsPath: string,
+    network: Network,
+    expectedChainId?: string
+): { [name: string]: { address: string; abi: any } } {
+    const chainId = network.config.chainId ?? expectedChainId;
+    if (chainId == null) return {};
+
+    // note: this is not guaranteed to succeed
+    // see https://github.com/NomicFoundation/hardhat-ignition/issues/668
+    const deployPath = path.join(deploymentsPath, `chain-${chainId}`);
+
+    // 1) get all deployed artifacts
+    const artifactsFound: { [identifier: string]: { name: string; abi: any } } = {};
+    {
+        const artifacts = path.join(deployPath, 'artifacts');
+
+        let filesStats;
+        try {
+            filesStats = traverse(artifacts, undefined, undefined, name => !name.endsWith('dbg.json'));
+        } catch (e) {
+            // console.log('no folder at ' + deployPath);
+            return {};
+        }
+        if (filesStats.length === 0) return {};
+
+        let fileNames: string[] = filesStats.map(a => a.relativePath);
+        fileNames = fileNames.sort((a, b) => {
+            if (a < b) {
+                return -1;
+            }
+            if (a > b) {
+                return 1;
+            }
+            return 0;
+        });
+
+        for (const fileName of fileNames) {
+            const deploymentName = path.parse(fileName).name;
+            const artifactFileName = path.join(artifacts, fileName);
+            const artifact = JSON.parse(fs.readFileSync(artifactFileName).toString());
+            artifactsFound[deploymentName] = { name: artifact.contractName, abi: artifact.abi };
+        }
+    }
+
+    // 2) get all deployments recorded
+    const deployments: Record<string, string> = JSON.parse(fs.readFileSync(path.join(deployPath, 'deployed_addresses.json')).toString());
+
+    const result: { [name: string]: { address: string; abi: any } } = {};
+    for (const [identifier, address] of Object.entries(deployments)) {
+        if (!(identifier in artifactsFound)) {
+            continue;
+        }
+        const { name, abi } = artifactsFound[identifier];
+        result[name] = { address, abi };
+    }
+    return result;
 }

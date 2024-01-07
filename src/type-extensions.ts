@@ -25,4 +25,12 @@ declare module 'hardhat/types/config' {
     interface ProjectPathsConfig {
         deployments: string;
     }
+
+    // from hardhat-ignition
+    export interface ProjectPathsUserConfig {
+        ignition?: string;
+    }
+    export interface ProjectPathsConfig {
+        ignition?: string;
+    }
 }
